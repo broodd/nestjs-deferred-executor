@@ -4,11 +4,14 @@ import compress from '@fastify/compress';
 import helmet from '@fastify/helmet';
 
 import { NestFastifyApplication, FastifyAdapter } from '@nestjs/platform-fastify';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { NestFactory } from '@nestjs/core';
 
+import { DEFAULT_RMQ_QUEUE_CONFIG } from './common/queues/constants';
 import { HttpExceptionFilter } from './common/filters';
 import { validationPipe } from './common/pipes';
 
+import { TASKS_QUEUE } from './modules/tasks/queues/tasks-queue.constants';
 import { ConfigMode } from './config/interfaces';
 import { AppModule } from './app.module';
 import { ConfigService } from './config';
@@ -36,10 +39,21 @@ async function bootstrap() {
   app.useGlobalPipes(validationPipe);
   app.useGlobalFilters(new HttpExceptionFilter());
 
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [configService.get<string>('RABBITMQ_URL')],
+      queueOptions: DEFAULT_RMQ_QUEUE_CONFIG,
+      queue: TASKS_QUEUE.name,
+      noAck: true,
+    },
+  });
+
   if (configService.getMode(ConfigMode.production)) app.enableShutdownHooks();
 
   await swaggerSetup(app, configService);
 
+  await app.startAllMicroservices();
   return app.listen(configService.get('PORT'), configService.get('HOST'));
 }
 bootstrap();
