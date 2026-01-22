@@ -1,9 +1,9 @@
 import { Controller, Post } from '@nestjs/common';
 
-import { TasksService } from '../services/tasks.service';
+import { TasksService } from './modules/tasks/services';
 
 @Controller('tasks')
-export class TasksController {
+export class AppController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post('example')

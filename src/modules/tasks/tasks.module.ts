@@ -1,32 +1,80 @@
-import { ClientsModule, Transport } from '@nestjs/microservices';
-import { Module } from '@nestjs/common';
+import {
+  ClientsProviderAsyncOptions,
+  ClientProviderOptions,
+  ClientsModule,
+} from '@nestjs/microservices';
+import { randomStringGenerator } from '@nestjs/common/utils/random-string-generator.util';
+import { DynamicModule, Provider, Module } from '@nestjs/common';
 
-import { DEFAULT_RMQ_QUEUE_CONFIG } from 'src/common/queues/constants';
+import { TASKS_MODULE_OPTIONS, TASKS_MODULE } from './tasks.constants';
+import { TasksOptionsFactory } from './interfaces';
+import { TasksService } from './services';
 
-import { ConfigService } from 'src/config';
+@Module({})
+export class TasksModule {
+  static register(options: ClientProviderOptions): DynamicModule {
+    return {
+      module: TasksModule,
+      imports: [ClientsModule.register([options])],
+      providers: [
+        { provide: TASKS_MODULE_OPTIONS, useValue: options },
+        { provide: TASKS_MODULE, useValue: randomStringGenerator() },
+        { provide: TasksService, useClass: TasksService },
+      ],
+      exports: [TASKS_MODULE, TASKS_MODULE_OPTIONS, TasksService],
+    };
+  }
 
-import { TASKS_QUEUE } from './queues/tasks-queue.constants';
-import { TasksService } from './services/tasks.service';
-import { TasksController } from './controllers';
+  /**
+   * [description]
+   * @param  options [description]
+   */
+  public static registerAsync(options: ClientsProviderAsyncOptions): DynamicModule {
+    return {
+      module: TasksModule,
+      imports: (options.imports || []).concat([ClientsModule.registerAsync([options])]),
+      providers: [
+        ...this.createAsyncProviders(options),
+        { provide: TASKS_MODULE, useValue: randomStringGenerator() },
+        { provide: TasksService, useClass: TasksService },
+      ],
+      exports: [TASKS_MODULE, TASKS_MODULE_OPTIONS, TasksService],
+    };
+  }
 
-@Module({
-  imports: [
-    ClientsModule.registerAsync([
+  /**
+   * [description]
+   * @param  options [description]
+   */
+  private static createAsyncProviders(options: ClientsProviderAsyncOptions): Provider[] {
+    if (options.useExisting || options.useFactory) {
+      return [this.createAsyncOptionsProvider(options)];
+    }
+    return [
+      this.createAsyncOptionsProvider(options),
       {
-        name: TASKS_QUEUE.clientToken,
-        useFactory: (configService: ConfigService) => ({
-          transport: Transport.RMQ,
-          options: {
-            urls: [configService.get<string>('RABBITMQ_URL')],
-            queue: TASKS_QUEUE.name,
-            queueOptions: DEFAULT_RMQ_QUEUE_CONFIG,
-          },
-        }),
-        inject: [ConfigService],
+        provide: options.useClass,
+        useClass: options.useClass,
       },
-    ]),
-  ],
-  providers: [TasksService],
-  controllers: [TasksController],
-})
-export class TasksModule {}
+    ];
+  }
+
+  /**
+   * [description]
+   * @param  options [description]
+   */
+  private static createAsyncOptionsProvider(options: ClientsProviderAsyncOptions): Provider {
+    if (options.useFactory) {
+      return {
+        provide: TASKS_MODULE_OPTIONS,
+        useFactory: options.useFactory,
+        inject: options.inject || [],
+      };
+    }
+    return {
+      provide: TASKS_MODULE_OPTIONS,
+      useFactory: (optionsFactory: TasksOptionsFactory) => optionsFactory.createTasksOptions(),
+      inject: [options.useExisting || options.useClass],
+    };
+  }
+}
