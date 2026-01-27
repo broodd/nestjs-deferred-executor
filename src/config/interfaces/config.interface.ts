@@ -9,6 +9,15 @@ export enum ConfigMode {
 }
 
 /**
+ * Type of application modes
+ */
+export enum ConfigAppMode {
+  'ALL' = 'ALL',
+  'API' = 'API',
+  'WORKER' = 'WORKER',
+}
+
+/**
  * [description]
  */
 export interface IConfigService {

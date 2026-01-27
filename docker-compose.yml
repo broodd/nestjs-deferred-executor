@@ -18,8 +18,8 @@ services:
     networks:
       - app-network
 
-  gateway:
-    container_name: gateway-nestjs-deferred-executor
+  api:
+    container_name: api-nestjs-deferred-executor
     build:
       context: .
       dockerfile: Dockerfile
@@ -28,9 +28,26 @@ services:
     env_file:
       - .env.production
     environment:
+      APP_MODE: API
       NODE_ENV: production
       SWAGGER_USERNAME: swagger
       SWAGGER_PASSWORD: swagger
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  worker:
+    container_name: worker-nestjs-deferred-executor
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env.production
+    environment:
+      APP_MODE: WORKER
+      NODE_ENV: production
     depends_on:
       rabbitmq:
         condition: service_healthy

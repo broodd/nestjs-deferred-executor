@@ -12,7 +12,7 @@ import { HttpExceptionFilter } from './common/filters';
 import { validationPipe } from './common/pipes';
 
 import { TASKS_QUEUE } from './modules/tasks/queues/tasks-queue.constants';
-import { ConfigMode } from './config/interfaces';
+import { ConfigAppMode, ConfigMode } from './config/interfaces';
 import { AppModule } from './app.module';
 import { ConfigService } from './config';
 import { swaggerSetup } from './swagger';
@@ -28,32 +28,40 @@ async function bootstrap() {
   );
   const configService = app.get(ConfigService);
 
-  await app.register(compress, { encodings: ['gzip', 'deflate'] });
-  await app.register(helmet, { contentSecurityPolicy: false });
-
-  app.setGlobalPrefix(configService.get('PREFIX')).enableCors({
-    credentials: configService.get('CORS_CREDENTIALS'),
-    origin: configService.get('CORS_ORIGIN'),
-  });
-
   app.useGlobalPipes(validationPipe);
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
-      urls: [configService.get<string>('RABBITMQ_URL')],
-      queueOptions: DEFAULT_RMQ_QUEUE_CONFIG,
-      queue: TASKS_QUEUE.name,
-      noAck: true,
-    },
-  });
+  if (configService.getMode(ConfigMode.production)) {
+    app.enableShutdownHooks();
+  }
 
-  if (configService.getMode(ConfigMode.production)) app.enableShutdownHooks();
+  const appMode = configService.get<ConfigAppMode>('APP_MODE');
 
-  await swaggerSetup(app, configService);
+  if (appMode === ConfigAppMode.API || appMode === ConfigAppMode.ALL) {
+    await app.register(compress, { encodings: ['gzip', 'deflate'] });
+    await app.register(helmet, { contentSecurityPolicy: false });
 
-  await app.startAllMicroservices();
-  return app.listen(configService.get('PORT'), configService.get('HOST'));
+    app.setGlobalPrefix(configService.get('PREFIX')).enableCors({
+      credentials: configService.get('CORS_CREDENTIALS'),
+      origin: configService.get('CORS_ORIGIN'),
+    });
+
+    await swaggerSetup(app, configService);
+
+    await app.listen(configService.get('PORT'), configService.get('HOST'));
+  }
+
+  if (appMode === ConfigAppMode.WORKER || appMode === ConfigAppMode.ALL) {
+    app.connectMicroservice<MicroserviceOptions>({
+      transport: Transport.RMQ,
+      options: {
+        urls: [configService.get<string>('RABBITMQ_URL')],
+        queueOptions: DEFAULT_RMQ_QUEUE_CONFIG,
+        queue: TASKS_QUEUE.name,
+      },
+    });
+
+    await app.startAllMicroservices();
+  }
 }
 bootstrap();
